@@ -1,0 +1,150 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  organizations OrganizationMember[]
+}
+
+model Organization {
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  plan            String    @default("FREE") // Enum Plan -> String
+  stripeCustomerId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  members         OrganizationMember[]
+  chatbots        Chatbot[]
+  knowledgeBases  KnowledgeBase[]
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  role           String       @default("MEMBER") // Enum Role -> String
+  
+  user           User         @relation(fields: [userId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  
+  @@unique([userId, organizationId])
+}
+
+model Chatbot {
+  id              String    @id @default(cuid())
+  organizationId  String
+  name            String
+  welcomeMessage  String    @default("Hi! How can I help you today?")
+  primaryColor    String    @default("#0066FF")
+  position        String    @default("bottom-right")
+  isActive        Boolean   @default(true)
+  
+  // Behavior settings
+  collectLeadInfo Boolean   @default(true)
+  enableBooking   Boolean   @default(false)
+  calendlyUrl     String?
+  handoffEmail    String?
+  handoffPhone    String?
+  
+  // Knowledge base link
+  knowledgeBaseId String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  organization    Organization   @relation(fields: [organizationId], references: [id])
+  knowledgeBase   KnowledgeBase? @relation(fields: [knowledgeBaseId], references: [id])
+  conversations   Conversation[]
+  leads           Lead[]
+}
+
+model KnowledgeBase {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  documents      Document[]
+  chatbots       Chatbot[]
+}
+
+model Document {
+  id              String    @id @default(cuid())
+  knowledgeBaseId String
+  title           String
+  content         String
+  sourceUrl       String?
+  sourceType      String    @default("MANUAL") // Enum SourceType -> String
+  isProcessed     Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id])
+  chunks          DocumentChunk[]
+}
+
+model DocumentChunk {
+  id          String    @id @default(cuid())
+  documentId  String
+  content     String
+  // embedding   Float[]   // Removed for SQLite compatibility
+  metadata    String?   // Json -> String
+  createdAt   DateTime  @default(now())
+  
+  document    Document  @relation(fields: [documentId], references: [id])
+}
+
+model Conversation {
+  id          String    @id @default(cuid())
+  chatbotId   String
+  sessionId   String
+  leadId      String?
+  status      String    @default("ACTIVE") // Enum ConversationStatus -> String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  chatbot     Chatbot   @relation(fields: [chatbotId], references: [id])
+  lead        Lead?     @relation(fields: [leadId], references: [id])
+  messages    Message[]
+}
+
+model Message {
+  id             String    @id @default(cuid())
+  conversationId String
+  role           String    // Enum MessageRole -> String
+  content        String
+  createdAt      DateTime  @default(now())
+  
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+}
+
+model Lead {
+  id          String    @id @default(cuid())
+  chatbotId   String
+  name        String?
+  email       String?
+  phone       String?
+  metadata    String?   // Json -> String
+  createdAt   DateTime  @default(now())
+  
+  chatbot       Chatbot        @relation(fields: [chatbotId], references: [id])
+  conversations Conversation[]
+}
